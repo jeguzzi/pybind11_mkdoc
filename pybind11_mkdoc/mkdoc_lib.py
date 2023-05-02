@@ -85,7 +85,7 @@ def sanitize_name(name):
     return '__doc_' + name
 
 
-def process_comment(comment):
+def process_comment(comment, fmt='rst'):
     result = ''
 
     # Remove C++ comment syntax
@@ -121,17 +121,22 @@ def process_comment(comment):
     s = re.sub(r'[\\@]em\s+%s' % cpp_group, r'*\1*', s)
     s = re.sub(r'[\\@]b\s+%s' % cpp_group, r'**\1**', s)
     s = re.sub(r'[\\@]ingroup\s+%s' % cpp_group, r'', s)
-    s = re.sub(r'[\\@]param%s?\s+%s' % (param_group, cpp_group),
-               r'\n\n$Parameter ``\2``:\n\n', s)
+    if fmt == 'rst':
+        s = re.sub(r'[\\@]param%s?\s+%s' % (param_group, cpp_group),
+                   r'\n\n$:param \2:\n\n', s)
+    else:
+        s = re.sub(r'[\\@]param%s?\s+%s' % (param_group, cpp_group),
+                   r'\n\n$Parameter ``\2``:\n\n', s)
     s = re.sub(r'[\\@]tparam%s?\s+%s' % (param_group, cpp_group),
                r'\n\n$Template parameter ``\2``:\n\n', s)
 
     # Remove class and struct tags
     s = re.sub(r'[\\@](class|struct)\s+.*', '', s)
 
+
     for in_, out_ in {
-        'returns': 'Returns',
-        'return': 'Returns',
+        'returns': ':return' if fmt == 'rst' else 'Returns',
+        'return': ':return' if fmt == 'rst' else 'Returns',
         'authors': 'Authors',
         'author': 'Author',
         'copyright': 'Copyright',
@@ -140,15 +145,15 @@ def process_comment(comment):
         'sa': 'See also',
         'see': 'See also',
         'extends': 'Extends',
-        'throws': 'Throws',
-        'throw': 'Throws'
+        'throws': ':raise' if fmt == 'rst' else 'Throws',
+        'throw': ':raise' if fmt == 'rst' else 'Throws'
     }.items():
         s = re.sub(r'[\\@]%s\s*' % in_, r'\n\n$%s:\n\n' % out_, s)
 
     s = re.sub(r'[\\@]details\s*', r'\n\n', s)
     s = re.sub(r'[\\@]brief\s*', r'', s)
     s = re.sub(r'[\\@]short\s*', r'', s)
-    s = re.sub(r'[\\@]ref\s*', r'', s)
+    # s = re.sub(r'[\\@]ref\s*', r'', s)
 
     s = re.sub(r'[\\@]code\s?(.*?)\s?[\\@]endcode',
                r"```\n\1\n```\n", s, flags=re.DOTALL)
@@ -180,13 +185,17 @@ def process_comment(comment):
     wrapper = textwrap.TextWrapper()
     wrapper.expand_tabs = True
     wrapper.replace_whitespace = True
+    # wrapper.replace_whitespace = False
     wrapper.drop_whitespace = True
+    # wrapper.drop_whitespace = False
     wrapper.width = docstring_width
     wrapper.initial_indent = wrapper.subsequent_indent = ''
 
     result = ''
     in_code_segment = False
     for x in re.split(r'(```)', s):
+
+
         if x == '```':
             if not in_code_segment:
                 result += '```\n'
@@ -197,6 +206,9 @@ def process_comment(comment):
             result += x.strip()
         else:
             for y in re.split(r'(?: *\n *){2,}', x):
+                r = re.search(r"^(\d+\.|\-#?|\*|\+)\s+", y)
+                if r:
+                    wrapper.subsequent_indent = ' ' * r.end()
                 wrapped = wrapper.fill(re.sub(r'\s+', ' ', y).strip())
                 if len(wrapped) > 0 and wrapped[0] == '$':
                     result += wrapped[1:] + '\n'
